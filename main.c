@@ -7,7 +7,7 @@
 #include "c8.h"
 
 enum c8_frontend_params {
-	MAX_AUDIO_SAMPLE_SIZE = 512,
+    MAX_AUDIO_SAMPLE_SIZE = 512,
     BEEP_FREQ = 440,
     SCREEN_WIDTH = 800,
     SCREEN_HEIGHT = 600,
