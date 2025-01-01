@@ -6,10 +6,13 @@
 
 #include "c8.h"
 
-const int MAX_AUDIO_SAMPLE_SIZE = 512;
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 600;
-const int PIXEL_SIZE = 8;
+enum c8_frontend_params {
+	MAX_AUDIO_SAMPLE_SIZE = 512,
+    BEEP_FREQ = 440,
+    SCREEN_WIDTH = 800,
+    SCREEN_HEIGHT = 600,
+    PIXEL_SIZE = 8,
+};
 const uint8_t TEST_ROM[] = {
         0xa2, 0x1e, 0xc2, 0x01, 0x32, 0x01, 0xa2, 0x1a,
         0xd0, 0x14, 0x70, 0x04, 0x30, 0x40, 0x12, 0x00,
@@ -24,6 +27,18 @@ const int KEY_BINDS[16] = {
     KEY_Z, KEY_X, KEY_C, KEY_V
 };
 
+void beep_callback(void* buffer, unsigned int frames) {
+    static float sine_arg = 0.f;
+    int16_t* b = (int16_t*)buffer;
+    for (unsigned int i = 0; i < frames; ++i) {
+        b[i] = (int16_t)(32000.f * sinf(2*PI*sine_arg));
+        sine_arg += BEEP_FREQ / 44100.f;
+        if (sine_arg > 1.f) {
+            sine_arg = -1.f;
+        }
+    }
+}
+
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_HIGHDPI);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "c8");
@@ -32,10 +47,7 @@ int main(void) {
     InitAudioDevice();
     SetAudioStreamBufferSizeDefault(MAX_AUDIO_SAMPLE_SIZE);
     AudioStream audio = LoadAudioStream(44100, 16, 1);
-    int16_t beep[MAX_AUDIO_SAMPLE_SIZE];
-    for (int i = 0; i < MAX_AUDIO_SAMPLE_SIZE; ++i) {
-        beep[i] = (int16_t)(sinf(2*PI*(float)i/MAX_AUDIO_SAMPLE_SIZE) * 32000);
-    }
+    SetAudioStreamCallback(audio, beep_callback);
 
     c8_machine_config vm_config = c8_get_default_machine_config();
     c8_state* vm = c8_create(vm_config);
@@ -67,14 +79,16 @@ int main(void) {
             UnloadDroppedFiles(list);
         }
 
-        if (IsAudioStreamProcessed(audio)) {
-            UpdateAudioStream(audio, beep, MAX_AUDIO_SAMPLE_SIZE);
-        }
+        const bool isAudioPlaying = IsAudioStreamPlaying(audio);
         if (vm_regs->st > 0) {
-            PlayAudioStream(audio);
+            if (!isAudioPlaying) {
+                PlayAudioStream(audio);
+            }
         }
         else {
-            PauseAudioStream(audio);
+            if (isAudioPlaying) {
+                PauseAudioStream(audio);
+            }
         }
 
         c8_step_frame(vm);
