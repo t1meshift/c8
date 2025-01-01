@@ -767,6 +767,7 @@ c8_state *c8_create(c8_machine_config config) {
     result->config = config;
     result->memory = nullptr;
     result->display = nullptr;
+    result->vblank = 1;
 
     c8_reset(result);
 
