@@ -840,16 +840,6 @@ const uint8_t *c8_get_display(const c8_state *state, uint32_t *display_size) {
     return state->display;
 }
 
-void c8_set_display(c8_state *state, const uint8_t *display, uint32_t display_size) {
-    if (state == nullptr || display == nullptr) {
-        return;
-    }
-
-    assert(display_size <= state->config.screen_width * state->config.screen_height);
-
-    memmove(state->display, display, display_size);
-}
-
 const uint8_t* c8_get_memory(c8_state* state) {
     if (state == nullptr) {
          return nullptr;

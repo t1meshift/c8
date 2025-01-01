@@ -278,17 +278,6 @@ void c8_set_registers(c8_state* state, const c8_registers* regs);
 const uint8_t* c8_get_display(const c8_state* state, uint32_t* display_size);
 
 /**
- * Sets display state for a machine.
- *
- * @see c8_get_display
- *
- * @param state CHIP-8 machine state.
- * @param display A new display state.
- * @param display_size Given display's array size.
- */
-void c8_set_display(c8_state* state, const uint8_t* display, uint32_t display_size);
-
-/**
  * Gets machine's memory pointer.
  *
  * @param state CHIP-8 machine state
