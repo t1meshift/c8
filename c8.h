@@ -31,6 +31,128 @@ typedef enum c8_key
 } c8_key;
 
 /**
+ * CHIP-8 quirk flags enum.
+ *
+ * (stolen from https://github.com/chip-8/chip-8-database/)
+ */
+typedef enum c8_quirk
+#ifndef C23_COMPAT_NO_ENUM_TYPES
+    : uint32_t
+#endif
+{
+    /**
+     * A value indicating no quirks.
+     */
+	C8_QUIRK_NONE = 0,
+
+	/**
+	 * 
+	 * Shift quirk
+	 *
+	 * On most systems the shift opcodes take `vY` as input and stores the
+	 * shifted version of `vY` into `vX`. The interpreters for the HP48 took
+	 * `vX` as both the input and the output, introducing the shift quirk.
+	 *
+	 * Set: Opcodes `8XY6` and `8XYE` take `vX` as both input and output.
+	 * 
+	 * Unset: Opcodes `8XY6` and `8XYE` take `vY` as input and `vX` as output.
+	 */
+	C8_QUIRK_SHIFT = 1 << 0,
+
+    /**
+     * Load/Store quirk: increment index register by X
+     *
+     * On most systems storing and retrieving data between registers and memory
+     * increments the `i` register with `X + 1` (the number of registers read
+     * or written). So for each register read or written, the index register
+     * would be incremented. The CHIP-48 interpreter for the HP48 would only
+     * increment the `i` register by `X`, introducing the first
+     * load/store quirk.
+     *
+     * Set: `FX55` and `FX65` increment the `i` register with `X`.
+     * 
+     * Unset: `FX55` and `FX65` increment the `i` register with `X + 1`.
+     */
+    C8_QUIRK_LOAD_STORE_INC_I_BY_X = 1 << 1,
+
+    /**
+     * Load/Store quirk: leave index register unchanged
+     *
+     * On most systems storing and retrieving data between registers and memory
+     * increments the `i` register relative to the number of registers read or
+     * written. The Superchip 1.1 interpreter for the HP48 however did not
+     * increment the `i` register at all, introducing the second
+     * load/store quirk.
+     *
+     * Set: `FX55` and `FX65` leave the `i` register unchanged.
+     *
+     * Unset: `FX55` and `FX65` increment the `i` register.
+     */
+    C8_QUIRK_LOAD_STORE_NO_INC_I = 1 << 2,
+
+    /**
+     * Wrap quirk
+     *
+     * Most systems, when drawing sprites to the screen, will clip sprites at
+     * the edges of the screen. The Octo interpreter, which spawned the XO-CHIP
+     * variant of CHIP-8, instead wraps the sprite around to the other side of
+     * the screen. This introduced the wrap quirk.
+     *
+     * Set: The `DXYN` opcode wraps around to the other side of the screen when
+     * drawing at the edges.
+     *
+     * Unset: The `DXYN` opcode clips when drawing at the edges of the screen.
+     */
+    C8_QUIRK_WRAP_SPRITES = 1 << 3,
+
+    /**
+     * Jump quirk
+     *
+     * The jump to `<address> + v0` opcode was wronly implemented on all the
+     * HP48 interpreters as jump to `<address> + vX`, introducing the
+     * jump quirk.
+     *
+     * Set: Opcode `BXNN` jumps to address `XNN + vX`.
+     *
+     * Unset: Opcode `BNNN` jumps to address `NNN + v0`.
+     */
+    C8_QUIRK_BXNN_JUMP = 1 << 4,
+
+    /**
+     * vBlank quirk
+     *
+     * The original Cosmac VIP interpreter would wait for vertical blank before
+     * each sprite draw. This was done to prevent sprite tearing on the
+     * display, but it would also act as an accidental limit on the execution
+     * speed of the program. Some programs rely on this speed limit to be
+     * playable. Vertical blank happens at 60Hz, and as such its logic be
+     * combined with the timers.
+     *
+     * Set: Opcode `DXYN` waits for vertical blank (so max 60 sprites drawn
+     * per second.)
+     *
+     * Unset: Opcode `DXYN` draws immediately (number of sprites drawn per
+     * second only limited to number of CPU cycles per frame.)
+     */
+    C8_QUIRK_VBLANK = 1 << 5,
+
+    /**
+     * VF reset quirk
+     *
+     * On the original Cosmac VIP interpreter, `vF` would be reset after each
+     * opcode that would invoke the maths coprocessor. Later interpreters have
+     * not copied this behaviour.
+     *
+     * Set: Opcodes `8XY1`, `8XY2` and `8XY3` (OR, AND and XOR) will set `vF`
+     * to zero after execution (even if `vF` is the parameter `X`.)
+     *
+     * Unset: Opcodes `8XY1`, `8XY2` and `8XY3` (OR, AND and XOR) will leave
+     * `vF` unchanged (unless `vF` is the parameter `X`.)
+     */
+    C8_QUIRK_VF_RESET = 1 << 6,
+} c8_quirk;
+
+/**
  * CHIP-8 machine state.
  */
 typedef struct c8_state c8_state;
@@ -47,7 +169,9 @@ typedef bool (*c8_op_handler)(c8_state* state, uint16_t op);
 typedef struct c8_machine_config {
     c8_op_handler op_handlers[8]; ///< Opcode handlers.
     uint32_t op_handlers_size; ///< A size of `op_handlers` array.
+    uint32_t quirks; ///< A bitset of CHIP-8 quirks.
     uint16_t memory_size; ///< CHIP-8 machine's memory size, in bytes.
+    uint16_t cycles_per_frame; ///< A number of cycles per frame.
     uint8_t screen_width; ///< Screen width, in logical pixels.
     uint8_t screen_height; ///< Screen height, in logical pixels.
 } c8_machine_config;
@@ -185,7 +309,7 @@ void c8_reset(c8_state* state);
  * @param state CHIP-8 machine state.
  * @param delta_time Time elapsed since last update call.
  */
-void c8_update(c8_state* state, float delta_time);
+void c8_update_timers(c8_state* state, float delta_time);
 
 /**
  * Makes a step in code execution.
@@ -193,6 +317,16 @@ void c8_update(c8_state* state, float delta_time);
  * @param state CHIP-8 machine state.
  */
 void c8_step(c8_state* state);
+
+/**
+ * Makes `cycles_per_frame` steps in code execution.
+ * `cycles_per_frame` is taken from machine's config.
+ *
+ * @see c8_step()
+ *
+ * @param state CHIP-8 machine state.
+ */
+void c8_step_frame(c8_state* state);
 
 /**
  * Passes a key press.

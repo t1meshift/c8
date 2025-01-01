@@ -27,7 +27,7 @@ const int KEY_BINDS[16] = {
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_HIGHDPI);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "c8");
-    SetTargetFPS(500);
+    SetTargetFPS(60);
 
     InitAudioDevice();
     SetAudioStreamBufferSizeDefault(MAX_AUDIO_SAMPLE_SIZE);
@@ -77,7 +77,7 @@ int main(void) {
             PauseAudioStream(audio);
         }
 
-        c8_step(vm);
+        c8_step_frame(vm);
 
         BeginDrawing();
         ClearBackground(BLACK);
@@ -155,7 +155,7 @@ int main(void) {
 
         EndDrawing();
 
-        c8_update(vm, GetFrameTime() * 1000.f);
+        c8_update_timers(vm, GetFrameTime() * 1000.f);
 
         for (int i = 0; i < 16; ++i) {
             if (IsKeyDown(KEY_BINDS[i])) {

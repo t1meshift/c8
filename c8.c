@@ -13,7 +13,17 @@
 #define C8_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define C8_MAX(a, b) ((a) > (b) ? (a) : (b))
 
-#define C8_MEM_FONT_OFFSET (0x0)
+enum c8_machine_params
+#ifndef C23_COMPAT_NO_ENUM_TYPES
+	: uint16_t
+#endif
+{
+    C8_MEM_FONT_OFFSET = 0x50,
+    C8_PC_ON_FAULT = 0x0,
+};
+
+const uint8_t C8_FAULT_HANDLER[] = { 0x10 | ((C8_PC_ON_FAULT & 0x0F00) >> 8), C8_PC_ON_FAULT & 0xFF };
+
 static const uint8_t C8_FONT[80] = {
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -44,6 +54,7 @@ struct c8_state {
         uint8_t b[4];
     } rng;
     float delta_time;
+    uint16_t vblank;
 };
 
 #pragma region CHIP-8 instructions
@@ -74,7 +85,9 @@ static void c8_op_cls(c8_state *state) {
  * of the stack and subtract 1 from the SP.
  */
 static void c8_op_ret(c8_state *state) {
-    assert(state->registers.sp > 0);
+    if (state->registers.sp == 0) {
+        state->registers.pc = C8_PC_ON_FAULT;
+    }
     state->registers.pc = state->registers.stack[--state->registers.sp] + 2;
 }
 
@@ -95,7 +108,9 @@ static void c8_op_jp_nnn(c8_state *state, uint16_t nnn) {
  * a limit of 16 successive calls.
  */
 static void c8_op_call(c8_state *state, uint16_t nnn) {
-    assert(state->registers.sp < 16);
+    if (state->registers.sp >= 16) {
+        state->registers.pc = C8_PC_ON_FAULT;
+    }
     state->registers.stack[state->registers.sp++] = state->registers.pc;
     state->registers.pc = nnn;
 
@@ -165,6 +180,11 @@ static void c8_op_ld_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
  */
 static void c8_op_or(c8_state *state, uint8_t x, uint8_t y) {
     state->registers.v[x] |= state->registers.v[y];
+
+    if ((state->config.quirks & C8_QUIRK_VF_RESET) != 0) {
+        state->registers.v[0xF] = 0;
+    }
+
     state->registers.pc += 2;
 }
 
@@ -175,6 +195,11 @@ static void c8_op_or(c8_state *state, uint8_t x, uint8_t y) {
  */
 static void c8_op_and(c8_state *state, uint8_t x, uint8_t y) {
     state->registers.v[x] &= state->registers.v[y];
+
+    if ((state->config.quirks & C8_QUIRK_VF_RESET) != 0) {
+        state->registers.v[0xF] = 0;
+    }
+
     state->registers.pc += 2;
 }
 
@@ -185,6 +210,11 @@ static void c8_op_and(c8_state *state, uint8_t x, uint8_t y) {
  */
 static void c8_op_xor(c8_state *state, uint8_t x, uint8_t y) {
     state->registers.v[x] ^= state->registers.v[y];
+
+    if ((state->config.quirks & C8_QUIRK_VF_RESET) != 0) {
+        state->registers.v[0xF] = 0;
+    }
+
     state->registers.pc += 2;
 }
 
@@ -215,13 +245,14 @@ static void c8_op_sub(c8_state *state, uint8_t x, uint8_t y) {
 /**
  * 8xy6 - SHR Vx, Vy
  *
- * Set VX equal to VX bitshifted right 1. VF is set to the least
- * significant bit of VX prior to the shift. Originally this opcode meant set
- * VX equal to VY bitshifted right 1 but emulators and software seem to ignore
- * VY now.
+ * Set VX equal to VY or VX bitshifted right 1. VF is set to the least
+ * significant bit of VX prior to the shift. 
  */
 static void c8_op_shr(c8_state *state, uint8_t x, uint8_t y) {
-    state->registers.v[x] >>= 1;
+    const bool hasShiftQuirk = (state->config.quirks & C8_QUIRK_SHIFT) != 0;
+    const uint8_t value = state->registers.v[hasShiftQuirk ? x : y];
+    state->registers.v[x] = value >> 1;
+    state->registers.v[0xF] = value & 0x1;
     state->registers.pc += 2;
 }
 
@@ -239,13 +270,14 @@ static void c8_op_subn(c8_state *state, uint8_t x, uint8_t y) {
 /**
  * 8xyE - SHL Vx, Vy
  *
- * Set VX equal to VX bitshifted left 1. VF is set to the most
- * significant bit of VX prior to the shift. Originally this opcode meant set
- * VX equal to VY bitshifted left 1 but emulators and software seem to ignore
- * VY now.
+ * Set VX equal to VY or VX bitshifted left 1. VF is set to the most
+ * significant bit of VX prior to the shift. 
  */
 static void c8_op_shl(c8_state *state, uint8_t x, uint8_t y) {
-    state->registers.v[x] <<= 1;
+    const bool hasShiftQuirk = (state->config.quirks & C8_QUIRK_SHIFT) != 0;
+    const uint8_t value = state->registers.v[hasShiftQuirk ? x : y];
+    state->registers.v[x] = value << 1;
+    state->registers.v[0xF] = (value & 0x80) >> 7;
     state->registers.pc += 2;
 }
 
@@ -274,7 +306,8 @@ static void c8_op_ld_i_nnn(c8_state *state, uint16_t nnn) {
  * Set the PC to NNN plus the value in V0.
  */
 static void c8_op_jp_v0_nnn(c8_state *state, uint16_t nnn) {
-    state->registers.pc = nnn + state->registers.v[0];
+    const bool jpXNN = (state->config.quirks & C8_QUIRK_BXNN_JUMP) != 0;
+    state->registers.pc = nnn + state->registers.v[jpXNN ? (nnn & 0xF00) >> 8 : 0];
 }
 
 /**
@@ -329,8 +362,16 @@ static void c8_op_rnd(c8_state *state, uint8_t x, uint8_t nn) {
  * occurs. 0 otherwise.
  */
 static void c8_op_drw(c8_state *state, uint8_t x, uint8_t y, uint8_t n) {
-    const uint16_t screen_width = state->config.screen_width;
-    const uint16_t screen_height = state->config.screen_height;
+    const bool hasVblankQuirk = (state->config.quirks & C8_QUIRK_VBLANK) != 0;
+    if (hasVblankQuirk) {
+	    if (state->vblank == 0) {
+		    return;
+	    }
+        --state->vblank;
+    }
+
+    const uint8_t screen_width = state->config.screen_width;
+    const uint8_t screen_height = state->config.screen_height;
 
     uint8_t px0 = state->registers.v[x] % screen_width;
     uint8_t py0 = state->registers.v[y] % screen_height;
@@ -339,10 +380,14 @@ static void c8_op_drw(c8_state *state, uint8_t x, uint8_t y, uint8_t n) {
 
     state->registers.v[0xF] = 0;
 
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            uint16_t dx = (px0 + j) % screen_width;
-            uint16_t dy = (py0 + i) % screen_height;
+    const bool wrap_sprites = (state->config.quirks & C8_QUIRK_WRAP_SPRITES) != 0;
+    const uint8_t sprite_width = wrap_sprites ? 8 : C8_MIN(8, screen_width - px0);
+    const uint8_t sprite_height = wrap_sprites ? n : C8_MIN(n, screen_height - py0);
+
+    for (uint8_t i = 0; i < sprite_height; ++i) {
+        for (uint8_t j = 0; j < sprite_width; ++j) {
+            uint8_t dx = (px0 + j) % screen_width;
+            uint8_t dy = (py0 + i) % screen_height;
 
             uint8_t* disp_pixel = &state->display[dy * screen_width + dx];
             uint8_t sprite_pixel = (*sprite >> (7 - j)) & 0x1;
@@ -469,7 +514,6 @@ static void c8_op_bcd(c8_state *state, uint8_t x) {
  * Fx55 - LD [I], Vx
  *
  * Store registers V0 through VX in memory starting at location I.
- * I does not change.
  */
 static void c8_op_ld_i_vx(c8_state *state, uint8_t x) {
     const uint16_t i = state->registers.i;
@@ -478,9 +522,15 @@ static void c8_op_ld_i_vx(c8_state *state, uint8_t x) {
     if (i + x >= mem_size) {
         x = mem_size - i - 1;
     }
-    assert(i + x < mem_size);
 
     memcpy(state->memory + i, state->registers.v, x + 1);
+
+    const bool shouldIncI = (state->config.quirks & C8_QUIRK_LOAD_STORE_NO_INC_I) == 0;
+    const bool incByX = (state->config.quirks & C8_QUIRK_LOAD_STORE_INC_I_BY_X) != 0;
+
+    if (shouldIncI) {
+        state->registers.i += x + (incByX ? 0 : 1);
+    }
 
     state->registers.pc += 2;
 }
@@ -489,7 +539,7 @@ static void c8_op_ld_i_vx(c8_state *state, uint8_t x) {
  * Fx65 - LD Vx, [I]
  *
  * Copy values from memory location I through I + X into registers V0
- * through VX. I does not change.
+ * through VX.
  */
 static void c8_op_ld_vx_i(c8_state *state, uint8_t x) {
     const uint16_t i = state->registers.i;
@@ -498,9 +548,15 @@ static void c8_op_ld_vx_i(c8_state *state, uint8_t x) {
     if (i + x >= mem_size) {
         x = mem_size - i - 1;
     }
-    assert(i + x < mem_size);
 
     memcpy(state->registers.v, state->memory + i, x + 1);
+
+    const bool shouldIncI = (state->config.quirks & C8_QUIRK_LOAD_STORE_NO_INC_I) == 0;
+    const bool incByX = (state->config.quirks & C8_QUIRK_LOAD_STORE_INC_I_BY_X) != 0;
+
+    if (shouldIncI) {
+        state->registers.i += x + (incByX ? 0 : 1);
+    }
 
     state->registers.pc += 2;
 }
@@ -697,7 +753,9 @@ c8_machine_config c8_get_default_machine_config() {
     c8_machine_config config = {
             .op_handlers = {c8_chip8_op_handler,},
             .op_handlers_size = 1,
+			.quirks = C8_QUIRK_NONE,
             .memory_size = 4096,
+			.cycles_per_frame = 15,
             .screen_width = 64,
             .screen_height = 32
     };
@@ -811,6 +869,7 @@ void c8_reset(c8_state *state) {
         memset(state->memory, 0, state->config.memory_size);
     }
 
+    memcpy(state->memory + C8_PC_ON_FAULT, C8_FAULT_HANDLER, sizeof(C8_FAULT_HANDLER));
     memcpy(state->memory + C8_MEM_FONT_OFFSET, C8_FONT, 80);
 
     if (state->display == nullptr) {
@@ -832,22 +891,23 @@ void c8_reset(c8_state *state) {
     };
 }
 
-void c8_update(c8_state *state, float delta_time) {
+void c8_update_timers(c8_state *state, float delta_time) {
     if (state == nullptr) {
         return;
     }
 
-    const float MS_PER_TICK = 1000.f / 60.f;
+    const float MS_PER_VBLANK = 1000.f / 60.f;
 
     state->delta_time += delta_time;
 
-    int ticks_elapsed = (int) (state->delta_time / MS_PER_TICK);
+    int ticks_elapsed = (int) (state->delta_time / MS_PER_VBLANK);
     int new_dt = state->registers.dt - ticks_elapsed;
     int new_st = state->registers.st - ticks_elapsed;
     state->registers.dt = C8_MAX(new_dt, 0);
     state->registers.st = C8_MAX(new_st, 0);
 
-    state->delta_time -= MS_PER_TICK * (float) ticks_elapsed;
+    state->delta_time -= MS_PER_VBLANK * (float) ticks_elapsed;
+    state->vblank = ticks_elapsed;
 }
 
 void c8_step(c8_state *state) {
@@ -866,8 +926,18 @@ void c8_step(c8_state *state) {
         }
     }
 
-    if (!opHandled) {
-        // TODO: error on missing op handlers
+    if (state->registers.pc >= state->config.memory_size) {
+        state->registers.pc = C8_PC_ON_FAULT;
+    }
+}
+
+void c8_step_frame(c8_state *state) {
+    if (state == nullptr) {
+        return;
+    }
+
+    for (uint16_t i = 0; i < state->config.cycles_per_frame; ++i) {
+        c8_step(state);
     }
 }
 
