@@ -105,10 +105,11 @@ int main(void) {
         }
 
         float uiOffsetY = (float)(vm_config.screen_height * PIXEL_SIZE + 3);
-        GuiGroupBox((Rectangle){1, uiOffsetY, 799, 599 - uiOffsetY}, "Debug");
+        GuiGroupBox((Rectangle){1, uiOffsetY, 699, 599 - uiOffsetY}, "Debug");
+        const uint8_t* mem_at_pc = vm_mem + vm_regs->pc;
         GuiDrawText(
-                TextFormat("OP: %04X", *(uint16_t*)(vm_mem + vm_regs->pc)),
-                (Rectangle){5, uiOffsetY + 10, 100, 20},
+                TextFormat("OP: %04X", ((uint16_t)*mem_at_pc << 8) | *(mem_at_pc + 1)),
+                (Rectangle){5, uiOffsetY + 10, 60, 20},
                 TEXT_ALIGN_LEFT,
                 WHITE
                 );
@@ -116,7 +117,7 @@ int main(void) {
         for (int i = 0; i < 16; ++i) {
             GuiDrawText(
                     TextFormat("V%X: %02X", i, vm_regs->v[i]),
-                    (Rectangle){5 + 100 * (i / 8), uiOffsetY + 40 + 20 * (i % 8), 100, 16},
+                    (Rectangle){5 + 60 * (i / 8), uiOffsetY + 40 + 20 * (i % 8), 60, 16},
                     TEXT_ALIGN_LEFT,
                     WHITE
             );
@@ -124,44 +125,45 @@ int main(void) {
 
         GuiDrawText(
                 TextFormat("PC: %04X", vm_regs->pc),
-                (Rectangle){205, uiOffsetY + 40, 100, 16},
+                (Rectangle){125, uiOffsetY + 40, 60, 16},
                 TEXT_ALIGN_LEFT,
                 WHITE
         );
 
         GuiDrawText(
                 TextFormat("I: %04X", vm_regs->i),
-                (Rectangle){205, uiOffsetY + 60, 100, 16},
+                (Rectangle){125, uiOffsetY + 60, 100, 16},
                 TEXT_ALIGN_LEFT,
                 WHITE
         );
 
         GuiDrawText(
                 TextFormat("DT: %02X", vm_regs->dt),
-                (Rectangle){205, uiOffsetY + 80, 100, 16},
+                (Rectangle){125, uiOffsetY + 80, 100, 16},
                 TEXT_ALIGN_LEFT,
                 WHITE
         );
 
         GuiDrawText(
                 TextFormat("ST: %02X", vm_regs->st),
-                (Rectangle){205, uiOffsetY + 100, 100, 16},
+                (Rectangle){125, uiOffsetY + 100, 100, 16},
                 TEXT_ALIGN_LEFT,
                 WHITE
         );
 
         GuiGroupBox(
                 (Rectangle){
-                    vm_config.screen_width * PIXEL_SIZE + 3, 5,
-                    800 - vm_config.screen_width * PIXEL_SIZE - 3, uiOffsetY - 5
+                    700, uiOffsetY,
+                    100, 599 - uiOffsetY
                     },
                     "Stack"
                     );
 
-        for (int i = vm_regs->sp - 1; i >= 0; --i) {
+        for (int i = 0; i < vm_regs->sp; ++i) {
+            const uint8_t stack_idx = vm_regs->sp - 1 - i;
             GuiDrawText(
-                    TextFormat("STACK %d: %02X", vm_regs->sp - 1 - i, vm_regs->stack[i]),
-                    (Rectangle){vm_config.screen_width * PIXEL_SIZE + 10, 5 + 20 * i, 100, 20},
+                    TextFormat("STACK %d: %04X", stack_idx, vm_regs->stack[stack_idx]),
+                    (Rectangle){710, uiOffsetY + 10 + 20 * i, 80, 20},
                     TEXT_ALIGN_LEFT,
                     WHITE
             );
