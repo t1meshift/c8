@@ -32,7 +32,8 @@ add_subdirectory(ext/raygui-090db35/projects/CMake)
 add_executable(${PROJECT_NAME} MACOSX_BUNDLE
         main.c
         c8.h
-        c8.c)
+        c8.c
+        c23_compat.h)
 target_link_libraries(${PROJECT_NAME} raylib raygui)
 
 # Web Configurations

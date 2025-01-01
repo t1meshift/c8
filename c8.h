@@ -1,11 +1,16 @@
 #pragma once
 
 #include <stdint.h>
+#include "c23_compat.h"
 
 /**
  * An enum for CHIP-8 keys.
  */
-typedef enum c8_key : uint8_t {
+typedef enum c8_key
+#ifndef C23_COMPAT_NO_ENUM_TYPES
+    : uint8_t
+#endif
+{
     C8_KEY_0 = 0,
     C8_KEY_1,
     C8_KEY_2,
