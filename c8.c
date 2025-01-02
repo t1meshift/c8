@@ -225,8 +225,9 @@ static void c8_op_xor(c8_state *state, uint8_t x, uint8_t y) {
  * Otherwise 0.
  */
 static void c8_op_add_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
-    state->registers.v[0xF] = state->registers.v[x] + state->registers.v[y] > 0xFF ? 1 : 0;
+    const uint8_t vf = state->registers.v[x] + state->registers.v[y] > 0xFF ? 1 : 0;
     state->registers.v[x] += state->registers.v[y];
+    state->registers.v[0xF] = vf;
     state->registers.pc += 2;
 }
 
@@ -237,8 +238,9 @@ static void c8_op_add_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
  * Otherwise 1. (VF = VX > VY)
  */
 static void c8_op_sub(c8_state *state, uint8_t x, uint8_t y) {
-    state->registers.v[0xF] = state->registers.v[x] > state->registers.v[y] ? 1 : 0;
+    const uint8_t vf = state->registers.v[x] > state->registers.v[y] ? 1 : 0;
     state->registers.v[x] -= state->registers.v[y];
+    state->registers.v[0xF] = vf;
     state->registers.pc += 2;
 }
 
@@ -262,8 +264,9 @@ static void c8_op_shr(c8_state *state, uint8_t x, uint8_t y) {
  * Set VX equal to VY minus VX. VF is set to 1 if VY > VX. Otherwise 0.
  */
 static void c8_op_subn(c8_state *state, uint8_t x, uint8_t y) {
-    state->registers.v[0xF] = state->registers.v[y] > state->registers.v[x] ? 1 : 0;
+    const uint8_t vf = state->registers.v[y] > state->registers.v[x] ? 1 : 0;
     state->registers.v[x] = state->registers.v[y] - state->registers.v[x];
+    state->registers.v[0xF] = vf;
     state->registers.pc += 2;
 }
 
