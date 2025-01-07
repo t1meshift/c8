@@ -2,6 +2,7 @@
 #include "raylib.h"
 
 #define RAYGUI_IMPLEMENTATION
+
 #include "raygui.h"
 
 #include "c8.h"
@@ -15,20 +16,20 @@ enum c8_frontend_params {
 };
 
 const uint8_t TEST_ROM[] = {
-        0xA2, 0x1A, // ld i, 0x21A
-        0x60, 0x12, // ld v0, 18
-        0xF0, 0x18, // ld dt, v0
-        0x60, 0xB4, // ld v0, 180
-        0xF0, 0x15, // ld dt, v0
-        0xC1, 0x3F, // rnd v1, 63
-        0xC2, 0x1F, // rnd v2, 31
-        0xD1, 0x25, // drw v1, v2, 5
-        0xF0, 0x07, // ld v0, dt
-        0x50, 0x30, // se v0, v3
-        0x12, 0x10, // jp 0x210
-        0xD1, 0x25, // drw v1, v2, 5
-        0x12, 0x06, // jp 0x206
-        0xEE, 0x8A, 0x84, 0x8A, 0xEE
+    0xA2, 0x1A, // ld i, 0x21A
+    0x60, 0x12, // ld v0, 18
+    0xF0, 0x18, // ld dt, v0
+    0x60, 0xB4, // ld v0, 180
+    0xF0, 0x15, // ld dt, v0
+    0xC1, 0x3F, // rnd v1, 63
+    0xC2, 0x1F, // rnd v2, 31
+    0xD1, 0x25, // drw v1, v2, 5
+    0xF0, 0x07, // ld v0, dt
+    0x50, 0x30, // se v0, v3
+    0x12, 0x10, // jp 0x210
+    0xD1, 0x25, // drw v1, v2, 5
+    0x12, 0x06, // jp 0x206
+    0xEE, 0x8A, 0x84, 0x8A, 0xEE
 };
 
 const int KEY_BINDS[16] = {
@@ -42,7 +43,7 @@ void beep_callback(void* buffer, unsigned int frames) {
     static float sine_arg = 0.f;
     int16_t* b = (int16_t*)buffer;
     for (unsigned int i = 0; i < frames; ++i) {
-        b[i] = (int16_t)(32000.f * sinf(2*PI*sine_arg));
+        b[i] = (int16_t)(32000.f * sinf(2 * PI * sine_arg));
         sine_arg += BEEP_FREQ / 44100.f;
         if (sine_arg > 1.f) {
             sine_arg = -1.f;
@@ -61,6 +62,7 @@ int main(void) {
     SetAudioStreamCallback(audio, beep_callback);
 
     c8_machine_config vm_config = c8_get_default_machine_config();
+    //vm_config.quirks = C8_QUIRK_VBLANK | C8_QUIRK_VF_RESET;
     c8_state* vm = c8_create(vm_config);
     c8_set_rng_seed(vm, time(nullptr));
 
@@ -72,6 +74,8 @@ int main(void) {
     uint8_t* rom = (uint8_t*)TEST_ROM;
     int rom_size = sizeof(TEST_ROM);
     c8_load_rom(vm, rom, rom_size);
+
+    int16_t mem_view_offset = 0;
 
     while (!WindowShouldClose()) {
         if (IsFileDropped()) {
@@ -110,75 +114,170 @@ int main(void) {
         for (int y = 0; y < vm_config.screen_height; ++y) {
             for (int x = 0; x < vm_config.screen_width; ++x) {
                 if (vm_display[y * vm_config.screen_width + x]) {
-                    DrawRectangle(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE, WHITE);
+                    DrawRectangle(
+                        x * PIXEL_SIZE,
+                        y * PIXEL_SIZE,
+                        PIXEL_SIZE,
+                        PIXEL_SIZE,
+                        WHITE
+                    );
                 }
             }
         }
 
         float uiOffsetY = (float)(vm_config.screen_height * PIXEL_SIZE + 3);
-        GuiGroupBox((Rectangle){1, uiOffsetY, 699, 599 - uiOffsetY}, "Debug");
+        GuiGroupBox((Rectangle){ 1, uiOffsetY, 225, 599 - uiOffsetY }, "Debug");
         const uint8_t* mem_at_pc = vm_mem + vm_regs->pc;
         GuiDrawText(
-                TextFormat("OP: %04X", ((uint16_t)*mem_at_pc << 8) | *(mem_at_pc + 1)),
-                (Rectangle){5, uiOffsetY + 10, 60, 20},
-                TEXT_ALIGN_LEFT,
-                WHITE
-                );
+            TextFormat(
+                "OP: %04X", ((uint16_t)*mem_at_pc << 8) | *(mem_at_pc + 1)
+            ), (Rectangle){ 5, uiOffsetY + 10, 60, 20 }, TEXT_ALIGN_LEFT, WHITE
+        );
 
         for (int i = 0; i < 16; ++i) {
             GuiDrawText(
-                    TextFormat("V%X: %02X", i, vm_regs->v[i]),
-                    (Rectangle){5 + 60 * (i / 8), uiOffsetY + 40 + 20 * (i % 8), 60, 16},
-                    TEXT_ALIGN_LEFT,
-                    WHITE
+                TextFormat("V%X: %02X", i, vm_regs->v[i]), (Rectangle){
+                    5 + 60 * (i / 8), uiOffsetY + 40 + 20 * (i % 8), 60, 16
+                }, TEXT_ALIGN_LEFT, WHITE
             );
         }
 
         GuiDrawText(
-                TextFormat("PC: %04X", vm_regs->pc),
-                (Rectangle){125, uiOffsetY + 40, 60, 16},
-                TEXT_ALIGN_LEFT,
-                WHITE
+            TextFormat("PC: %04X", vm_regs->pc),
+            (Rectangle){ 125, uiOffsetY + 40, 60, 16 },
+            TEXT_ALIGN_LEFT,
+            WHITE
         );
 
         GuiDrawText(
-                TextFormat("I: %04X", vm_regs->i),
-                (Rectangle){125, uiOffsetY + 60, 100, 16},
-                TEXT_ALIGN_LEFT,
-                WHITE
+            TextFormat("I: %04X", vm_regs->i),
+            (Rectangle){ 125, uiOffsetY + 60, 100, 16 },
+            TEXT_ALIGN_LEFT,
+            WHITE
         );
 
         GuiDrawText(
-                TextFormat("DT: %02X", vm_regs->dt),
-                (Rectangle){125, uiOffsetY + 80, 100, 16},
-                TEXT_ALIGN_LEFT,
-                WHITE
+            TextFormat("DT: %02X", vm_regs->dt),
+            (Rectangle){ 125, uiOffsetY + 80, 100, 16 },
+            TEXT_ALIGN_LEFT,
+            WHITE
         );
 
         GuiDrawText(
-                TextFormat("ST: %02X", vm_regs->st),
-                (Rectangle){125, uiOffsetY + 100, 100, 16},
-                TEXT_ALIGN_LEFT,
-                WHITE
+            TextFormat("ST: %02X", vm_regs->st),
+            (Rectangle){ 125, uiOffsetY + 100, 100, 16 },
+            TEXT_ALIGN_LEFT,
+            WHITE
         );
 
         GuiGroupBox(
+            (Rectangle){
+                225, uiOffsetY, 475, 599 - uiOffsetY
+            }, "Memory"
+        );
+
+        float mem_label_width = (465.f - 40.f) / 16.f;
+        for (int i = 0; i < 16; ++i) {
+            GuiDrawText(
+                TextFormat("%01X", i),
                 (Rectangle){
-                    700, uiOffsetY,
-                    100, 599 - uiOffsetY
-                    },
-                    "Stack"
-                    );
+                    250 + i * mem_label_width, uiOffsetY + 10,
+                    mem_label_width, 20
+                },
+                TEXT_ALIGN_CENTER,
+                WHITE
+            );
+        }
+
+        for (int i = 0; i < 12; ++i) {
+            const int row_num = mem_view_offset / 16 + i;
+            if (row_num > 255) {
+                break;
+            }
+            GuiDrawText(
+                TextFormat("%02X", row_num),
+                (Rectangle){
+                    225, uiOffsetY + 30 + i * 20,
+                    20, 20
+                },
+                TEXT_ALIGN_RIGHT,
+                WHITE
+            );
+        }
+
+        DrawLine(
+            250,
+            uiOffsetY + 30,
+            250,
+            uiOffsetY + 270,
+            WHITE
+        );
+
+        DrawLine(
+            250,
+            uiOffsetY + 30,
+            250 + 16 * mem_label_width,
+            uiOffsetY + 30,
+            WHITE
+        );
+
+        for (int i = 0; i < 192; ++i) {
+            if (mem_view_offset + i >= vm_config.memory_size) {
+                break;
+            }
+            GuiDrawText(
+                TextFormat("%02X", vm_mem[mem_view_offset + i]),
+                (Rectangle){
+                    250 + (i % 16) * mem_label_width,
+                    uiOffsetY + 30 + (i / 16) * 20,
+                    mem_label_width,
+                    20
+                },
+                TEXT_ALIGN_CENTER,
+                WHITE
+            );
+        }
+
+        if (GuiButton(
+            (Rectangle){
+                670, uiOffsetY + 10,
+                20, 20
+            },
+            "/\\"
+        )) {
+            mem_view_offset = C8_MAX(0, mem_view_offset - 16);
+        }
+
+        if (GuiButton(
+            (Rectangle){
+                670, uiOffsetY + 250,
+                20, 20
+            },
+            "\\/"
+        )) {
+            mem_view_offset =
+                C8_MIN(vm_config.memory_size - 16, mem_view_offset + 16);
+        }
+
+        GuiGroupBox(
+            (Rectangle){
+                700, uiOffsetY, 100, 599 - uiOffsetY
+            }, "Stack"
+        );
 
         for (int i = 0; i < vm_regs->sp; ++i) {
             const uint8_t stack_idx = vm_regs->sp - 1 - i;
             GuiDrawText(
-                    TextFormat("STACK %d: %04X", stack_idx, vm_regs->stack[stack_idx]),
-                    (Rectangle){710, uiOffsetY + 10 + 20 * i, 80, 20},
-                    TEXT_ALIGN_LEFT,
-                    WHITE
+                TextFormat(
+                    "STACK %d: %04X", stack_idx, vm_regs->stack[stack_idx]
+                ),
+                (Rectangle){ 710, uiOffsetY + 10 + 20 * i, 80, 20 },
+                TEXT_ALIGN_LEFT,
+                WHITE
             );
         }
+
+        // DrawFPS(5, 580);
 
         EndDrawing();
 

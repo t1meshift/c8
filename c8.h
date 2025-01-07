@@ -3,6 +3,9 @@
 #include <stdint.h>
 #include "c23_compat.h"
 
+#define C8_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define C8_MAX(a, b) ((a) > (b) ? (a) : (b))
+
 /**
  * An enum for CHIP-8 keys.
  */
@@ -43,21 +46,21 @@ typedef enum c8_quirk
     /**
      * A value indicating no quirks.
      */
-	C8_QUIRK_NONE = 0,
+    C8_QUIRK_NONE = 0,
 
-	/**
-	 * 
-	 * Shift quirk
-	 *
-	 * On most systems the shift opcodes take `vY` as input and stores the
-	 * shifted version of `vY` into `vX`. The interpreters for the HP48 took
-	 * `vX` as both the input and the output, introducing the shift quirk.
-	 *
-	 * Set: Opcodes `8XY6` and `8XYE` take `vX` as both input and output.
-	 * 
-	 * Unset: Opcodes `8XY6` and `8XYE` take `vY` as input and `vX` as output.
-	 */
-	C8_QUIRK_SHIFT = 1 << 0,
+    /**
+     *
+     * Shift quirk
+     *
+     * On most systems the shift opcodes take `vY` as input and stores the
+     * shifted version of `vY` into `vX`. The interpreters for the HP48 took
+     * `vX` as both the input and the output, introducing the shift quirk.
+     *
+     * Set: Opcodes `8XY6` and `8XYE` take `vX` as both input and output.
+     *
+     * Unset: Opcodes `8XY6` and `8XYE` take `vY` as input and `vX` as output.
+     */
+    C8_QUIRK_SHIFT = 1 << 0,
 
     /**
      * Load/Store quirk: increment index register by X
@@ -161,7 +164,7 @@ typedef struct c8_state c8_state;
  * A function pointer type for CHIP-8 operation handler.
  * Returns true if matched.
  */
-typedef bool (*c8_op_handler)(c8_state* state, uint16_t op);
+typedef bool (* c8_op_handler)(c8_state* state, uint16_t op);
 
 /**
  * CHIP-8 machine configuration struct.
@@ -218,7 +221,7 @@ void c8_destroy(c8_state* state);
  * @param state CHIP-8 machine state.
  * @param seed 32-bit seed for PRNG.
  */
-void c8_set_rng_seed(c8_state *state, uint32_t seed);
+void c8_set_rng_seed(c8_state* state, uint32_t seed);
 
 /**
  * Gets current seed for internal PRNG.

@@ -10,19 +10,16 @@
  * https://github.com/edrosten/8bit_rng/blob/master/rng-4294967294.cc
  */
 
-#define C8_MIN(a, b) ((a) < (b) ? (a) : (b))
-#define C8_MAX(a, b) ((a) > (b) ? (a) : (b))
-
 enum c8_machine_params
 #ifndef C23_COMPAT_NO_ENUM_TYPES
-	: uint16_t
+    : uint16_t
 #endif
 {
-    C8_MEM_FONT_OFFSET = 0x50,
-    C8_PC_ON_FAULT = 0x0,
+    C8_MEM_FONT_OFFSET = 0x50, C8_PC_ON_FAULT = 0x0,
 };
 
-const uint8_t C8_FAULT_HANDLER[] = { 0x10 | ((C8_PC_ON_FAULT & 0x0F00) >> 8), C8_PC_ON_FAULT & 0xFF };
+const uint8_t C8_FAULT_HANDLER[] =
+    { 0x10 | ((C8_PC_ON_FAULT & 0x0F00) >> 8), C8_PC_ON_FAULT & 0xFF };
 
 static const uint8_t C8_FONT[80] = {
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -47,8 +44,8 @@ struct c8_state {
     c8_machine_config config;
     c8_registers registers;
     bool pressed_keys[C8_KEY_MAX];
-    uint8_t *memory;
-    uint8_t *display;
+    uint8_t* memory;
+    uint8_t* display;
     union {
         uint32_t seed;
         uint8_t b[4];
@@ -64,7 +61,7 @@ struct c8_state {
  *
  * Call machine language subroutine at address NNN.
  */
-static void c8_op_sys(c8_state *state, uint16_t nnn) {
+static void c8_op_sys(c8_state* state, uint16_t nnn) {
     state->registers.pc += 2;
 }
 
@@ -73,8 +70,10 @@ static void c8_op_sys(c8_state *state, uint16_t nnn) {
  *
  * Clears the display. Sets all pixels to off.
  */
-static void c8_op_cls(c8_state *state) {
-    memset(state->display, 0, state->config.screen_width * state->config.screen_height);
+static void c8_op_cls(c8_state* state) {
+    memset(state->display,
+           0,
+           state->config.screen_width * state->config.screen_height);
     state->registers.pc += 2;
 }
 
@@ -84,7 +83,7 @@ static void c8_op_cls(c8_state *state) {
  * Return from subroutine. Set the PC to the address at the top
  * of the stack and subtract 1 from the SP.
  */
-static void c8_op_ret(c8_state *state) {
+static void c8_op_ret(c8_state* state) {
     if (state->registers.sp == 0) {
         state->registers.pc = C8_PC_ON_FAULT;
     }
@@ -96,7 +95,7 @@ static void c8_op_ret(c8_state *state) {
  *
  * Set PC to NNN.
  */
-static void c8_op_jp_nnn(c8_state *state, uint16_t nnn) {
+static void c8_op_jp_nnn(c8_state* state, uint16_t nnn) {
     state->registers.pc = nnn;
 }
 
@@ -107,7 +106,7 @@ static void c8_op_jp_nnn(c8_state *state, uint16_t nnn) {
  * on the top of the stack. Then set the PC to NNN. Generally there is
  * a limit of 16 successive calls.
  */
-static void c8_op_call(c8_state *state, uint16_t nnn) {
+static void c8_op_call(c8_state* state, uint16_t nnn) {
     if (state->registers.sp >= 16) {
         state->registers.pc = C8_PC_ON_FAULT;
     }
@@ -121,7 +120,7 @@ static void c8_op_call(c8_state *state, uint16_t nnn) {
  *
  * Skip the next instruction if register Vx is equal to NN.
  */
-static void c8_op_se_vx_nn(c8_state *state, uint8_t x, uint8_t nn) {
+static void c8_op_se_vx_nn(c8_state* state, uint8_t x, uint8_t nn) {
     state->registers.pc += state->registers.v[x] == nn ? 4 : 2;
 }
 
@@ -130,7 +129,7 @@ static void c8_op_se_vx_nn(c8_state *state, uint8_t x, uint8_t nn) {
  *
  * Skip the next instruction if register Vx is not equal to NN.
  */
-static void c8_op_sne_vx_nn(c8_state *state, uint8_t x, uint8_t nn) {
+static void c8_op_sne_vx_nn(c8_state* state, uint8_t x, uint8_t nn) {
     state->registers.pc += state->registers.v[x] != nn ? 4 : 2;
 }
 
@@ -139,8 +138,9 @@ static void c8_op_sne_vx_nn(c8_state *state, uint8_t x, uint8_t nn) {
  *
  * Skip the next instruction if register Vx equals Vy.
  */
-static void c8_op_se_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
-    state->registers.pc += state->registers.v[x] == state->registers.v[y] ? 4 : 2;
+static void c8_op_se_vx_vy(c8_state* state, uint8_t x, uint8_t y) {
+    state->registers.pc +=
+        state->registers.v[x] == state->registers.v[y] ? 4 : 2;
 }
 
 /**
@@ -148,7 +148,7 @@ static void c8_op_se_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
  *
  * Load immediate value NN into register VX.
  */
-static void c8_op_ld_vx_nn(c8_state *state, uint8_t x, uint8_t nn) {
+static void c8_op_ld_vx_nn(c8_state* state, uint8_t x, uint8_t nn) {
     state->registers.v[x] = nn;
     state->registers.pc += 2;
 }
@@ -158,7 +158,7 @@ static void c8_op_ld_vx_nn(c8_state *state, uint8_t x, uint8_t nn) {
  *
  * Add immediate value NN to register VX. Does **not** effect VF.
  */
-static void c8_op_add_vx_nn(c8_state *state, uint8_t x, uint8_t nn) {
+static void c8_op_add_vx_nn(c8_state* state, uint8_t x, uint8_t nn) {
     state->registers.v[x] += nn;
     state->registers.pc += 2;
 }
@@ -168,7 +168,7 @@ static void c8_op_add_vx_nn(c8_state *state, uint8_t x, uint8_t nn) {
  *
  * Copy the value in register VY into VX
  */
-static void c8_op_ld_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
+static void c8_op_ld_vx_vy(c8_state* state, uint8_t x, uint8_t y) {
     state->registers.v[x] = state->registers.v[y];
     state->registers.pc += 2;
 }
@@ -178,7 +178,7 @@ static void c8_op_ld_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
  *
  * Set VX equal to the bitwise or of the values in VX and VY.
  */
-static void c8_op_or(c8_state *state, uint8_t x, uint8_t y) {
+static void c8_op_or(c8_state* state, uint8_t x, uint8_t y) {
     state->registers.v[x] |= state->registers.v[y];
 
     if ((state->config.quirks & C8_QUIRK_VF_RESET) != 0) {
@@ -193,7 +193,7 @@ static void c8_op_or(c8_state *state, uint8_t x, uint8_t y) {
  *
  * Set VX equal to the bitwise and of the values in VX and VY.
  */
-static void c8_op_and(c8_state *state, uint8_t x, uint8_t y) {
+static void c8_op_and(c8_state* state, uint8_t x, uint8_t y) {
     state->registers.v[x] &= state->registers.v[y];
 
     if ((state->config.quirks & C8_QUIRK_VF_RESET) != 0) {
@@ -208,7 +208,7 @@ static void c8_op_and(c8_state *state, uint8_t x, uint8_t y) {
  *
  * Set VX equal to the bitwise xor of the values in VX and VY.
  */
-static void c8_op_xor(c8_state *state, uint8_t x, uint8_t y) {
+static void c8_op_xor(c8_state* state, uint8_t x, uint8_t y) {
     state->registers.v[x] ^= state->registers.v[y];
 
     if ((state->config.quirks & C8_QUIRK_VF_RESET) != 0) {
@@ -224,8 +224,9 @@ static void c8_op_xor(c8_state *state, uint8_t x, uint8_t y) {
  * Set VX equal to VX plus VY. In the case of an overflow VF is set to 1.
  * Otherwise 0.
  */
-static void c8_op_add_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
-    const uint8_t vf = state->registers.v[x] + state->registers.v[y] > 0xFF ? 1 : 0;
+static void c8_op_add_vx_vy(c8_state* state, uint8_t x, uint8_t y) {
+    const uint8_t
+        vf = state->registers.v[x] + state->registers.v[y] > 0xFF ? 1 : 0;
     state->registers.v[x] += state->registers.v[y];
     state->registers.v[0xF] = vf;
     state->registers.pc += 2;
@@ -237,7 +238,7 @@ static void c8_op_add_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
  * Set VX equal to VX minus VY. In the case of an underflow VF is set 0.
  * Otherwise 1. (VF = VX > VY)
  */
-static void c8_op_sub(c8_state *state, uint8_t x, uint8_t y) {
+static void c8_op_sub(c8_state* state, uint8_t x, uint8_t y) {
     const uint8_t vf = state->registers.v[x] > state->registers.v[y] ? 1 : 0;
     state->registers.v[x] -= state->registers.v[y];
     state->registers.v[0xF] = vf;
@@ -250,7 +251,7 @@ static void c8_op_sub(c8_state *state, uint8_t x, uint8_t y) {
  * Set VX equal to VY or VX bitshifted right 1. VF is set to the least
  * significant bit of VX prior to the shift. 
  */
-static void c8_op_shr(c8_state *state, uint8_t x, uint8_t y) {
+static void c8_op_shr(c8_state* state, uint8_t x, uint8_t y) {
     const bool hasShiftQuirk = (state->config.quirks & C8_QUIRK_SHIFT) != 0;
     const uint8_t value = state->registers.v[hasShiftQuirk ? x : y];
     state->registers.v[x] = value >> 1;
@@ -263,7 +264,7 @@ static void c8_op_shr(c8_state *state, uint8_t x, uint8_t y) {
  *
  * Set VX equal to VY minus VX. VF is set to 1 if VY > VX. Otherwise 0.
  */
-static void c8_op_subn(c8_state *state, uint8_t x, uint8_t y) {
+static void c8_op_subn(c8_state* state, uint8_t x, uint8_t y) {
     const uint8_t vf = state->registers.v[y] > state->registers.v[x] ? 1 : 0;
     state->registers.v[x] = state->registers.v[y] - state->registers.v[x];
     state->registers.v[0xF] = vf;
@@ -276,7 +277,7 @@ static void c8_op_subn(c8_state *state, uint8_t x, uint8_t y) {
  * Set VX equal to VY or VX bitshifted left 1. VF is set to the most
  * significant bit of VX prior to the shift. 
  */
-static void c8_op_shl(c8_state *state, uint8_t x, uint8_t y) {
+static void c8_op_shl(c8_state* state, uint8_t x, uint8_t y) {
     const bool hasShiftQuirk = (state->config.quirks & C8_QUIRK_SHIFT) != 0;
     const uint8_t value = state->registers.v[hasShiftQuirk ? x : y];
     state->registers.v[x] = value << 1;
@@ -289,8 +290,9 @@ static void c8_op_shl(c8_state *state, uint8_t x, uint8_t y) {
  *
  * Skip the next instruction if VX does not equal VY.
  */
-static void c8_op_sne_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
-    state->registers.pc += state->registers.v[x] != state->registers.v[y] ? 4 : 2;
+static void c8_op_sne_vx_vy(c8_state* state, uint8_t x, uint8_t y) {
+    state->registers.pc +=
+        state->registers.v[x] != state->registers.v[y] ? 4 : 2;
 }
 
 /**
@@ -298,7 +300,7 @@ static void c8_op_sne_vx_vy(c8_state *state, uint8_t x, uint8_t y) {
  *
  * Set I equal to NNN.
  */
-static void c8_op_ld_i_nnn(c8_state *state, uint16_t nnn) {
+static void c8_op_ld_i_nnn(c8_state* state, uint16_t nnn) {
     state->registers.i = nnn;
     state->registers.pc += 2;
 }
@@ -308,9 +310,10 @@ static void c8_op_ld_i_nnn(c8_state *state, uint16_t nnn) {
  *
  * Set the PC to NNN plus the value in V0.
  */
-static void c8_op_jp_v0_nnn(c8_state *state, uint16_t nnn) {
+static void c8_op_jp_v0_nnn(c8_state* state, uint16_t nnn) {
     const bool jpXNN = (state->config.quirks & C8_QUIRK_BXNN_JUMP) != 0;
-    state->registers.pc = nnn + state->registers.v[jpXNN ? (nnn & 0xF00) >> 8 : 0];
+    state->registers.pc =
+        nnn + state->registers.v[jpXNN ? (nnn & 0xF00) >> 8 : 0];
 }
 
 /**
@@ -319,7 +322,7 @@ static void c8_op_jp_v0_nnn(c8_state *state, uint16_t nnn) {
  * Set VX equal to a random number ranging from 0 to 255 which is logically
  * anded with NN.
  */
-static void c8_op_rnd(c8_state *state, uint8_t x, uint8_t nn) {
+static void c8_op_rnd(c8_state* state, uint8_t x, uint8_t nn) {
     /*
      * This code is stolen from
      * https://github.com/edrosten/8bit_rng/blob/master/rng-4294967294.cc
@@ -364,12 +367,12 @@ static void c8_op_rnd(c8_state *state, uint8_t x, uint8_t nn) {
  * bit of xored with what's already drawn. VF is set to 1 if a collision
  * occurs. 0 otherwise.
  */
-static void c8_op_drw(c8_state *state, uint8_t x, uint8_t y, uint8_t n) {
+static void c8_op_drw(c8_state* state, uint8_t x, uint8_t y, uint8_t n) {
     const bool hasVblankQuirk = (state->config.quirks & C8_QUIRK_VBLANK) != 0;
     if (hasVblankQuirk) {
-	    if (state->vblank == 0) {
-		    return;
-	    }
+        if (state->vblank == 0) {
+            return;
+        }
         --state->vblank;
     }
 
@@ -383,9 +386,12 @@ static void c8_op_drw(c8_state *state, uint8_t x, uint8_t y, uint8_t n) {
 
     state->registers.v[0xF] = 0;
 
-    const bool wrap_sprites = (state->config.quirks & C8_QUIRK_WRAP_SPRITES) != 0;
-    const uint8_t sprite_width = wrap_sprites ? 8 : C8_MIN(8, screen_width - px0);
-    const uint8_t sprite_height = wrap_sprites ? n : C8_MIN(n, screen_height - py0);
+    const bool
+        wrap_sprites = (state->config.quirks & C8_QUIRK_WRAP_SPRITES) != 0;
+    const uint8_t
+        sprite_width = wrap_sprites ? 8 : C8_MIN(8, screen_width - px0);
+    const uint8_t
+        sprite_height = wrap_sprites ? n : C8_MIN(n, screen_height - py0);
 
     for (uint8_t i = 0; i < sprite_height; ++i) {
         for (uint8_t j = 0; j < sprite_width; ++j) {
@@ -412,7 +418,7 @@ static void c8_op_drw(c8_state *state, uint8_t x, uint8_t y, uint8_t n) {
  * Skip the following instruction if the key represented by the value in VX
  * is pressed.
  */
-static void c8_op_skp(c8_state *state, uint8_t x) {
+static void c8_op_skp(c8_state* state, uint8_t x) {
     c8_key key = state->registers.v[x];
     state->registers.pc += key <= 0xF && state->pressed_keys[key] ? 4 : 2;
 }
@@ -423,7 +429,7 @@ static void c8_op_skp(c8_state *state, uint8_t x) {
  * Skip the following instruction if the key represented by the value in VX
  * is not pressed.
  */
-static void c8_op_sknp(c8_state *state, uint8_t x) {
+static void c8_op_sknp(c8_state* state, uint8_t x) {
     c8_key key = state->registers.v[x];
     state->registers.pc += !(key <= 0xF && state->pressed_keys[key]) ? 4 : 2;
 }
@@ -433,7 +439,7 @@ static void c8_op_sknp(c8_state *state, uint8_t x) {
  *
  * Set VX equal to the delay timer.
  */
-static void c8_op_ld_vx_dt(c8_state *state, uint8_t x) {
+static void c8_op_ld_vx_dt(c8_state* state, uint8_t x) {
     state->registers.v[x] = state->registers.dt;
     state->registers.pc += 2;
 }
@@ -443,7 +449,7 @@ static void c8_op_ld_vx_dt(c8_state *state, uint8_t x) {
  *
  * Wait for a key press and store the value of the key into VX.
  */
-static void c8_op_ld_vx_key(c8_state *state, uint8_t x) {
+static void c8_op_ld_vx_key(c8_state* state, uint8_t x) {
     for (c8_key i = C8_KEY_0; i < C8_KEY_MAX; ++i) {
         if (state->pressed_keys[i]) {
             state->registers.v[x] = i;
@@ -458,7 +464,7 @@ static void c8_op_ld_vx_key(c8_state *state, uint8_t x) {
  *
  * Set the delay timer DT to VX.
  */
-static void c8_op_ld_dt_vx(c8_state *state, uint8_t x) {
+static void c8_op_ld_dt_vx(c8_state* state, uint8_t x) {
     state->registers.dt = state->registers.v[x];
     state->registers.pc += 2;
 }
@@ -468,7 +474,7 @@ static void c8_op_ld_dt_vx(c8_state *state, uint8_t x) {
  *
  * Set the sound timer ST to VX.
  */
-static void c8_op_ld_st_vx(c8_state *state, uint8_t x) {
+static void c8_op_ld_st_vx(c8_state* state, uint8_t x) {
     state->registers.st = state->registers.v[x];
     state->registers.pc += 2;
 }
@@ -478,7 +484,7 @@ static void c8_op_ld_st_vx(c8_state *state, uint8_t x) {
  *
  * Add VX to I. VF is set to 1 if I > 0x0FFF. Otherwise set to 0.
  */
-static void c8_op_add_i_vx(c8_state *state, uint8_t x) {
+static void c8_op_add_i_vx(c8_state* state, uint8_t x) {
     state->registers.i += state->registers.v[x];
     state->registers.v[0xF] = state->registers.i > 0x0FFF ? 1 : 0;
     state->registers.i &= 0xFFF;
@@ -491,8 +497,9 @@ static void c8_op_add_i_vx(c8_state *state, uint8_t x) {
  * Set I to the address of the CHIP-8 8x5 font sprite representing the value
  * in VX.
  */
-static void c8_op_ld_i_font_vx(c8_state *state, uint8_t x) {
-    state->registers.i = C8_MEM_FONT_OFFSET + (state->registers.v[x] & 0x0F) * 5;
+static void c8_op_ld_i_font_vx(c8_state* state, uint8_t x) {
+    state->registers.i =
+        C8_MEM_FONT_OFFSET + (state->registers.v[x] & 0x0F) * 5;
     state->registers.pc += 2;
 }
 
@@ -502,7 +509,7 @@ static void c8_op_ld_i_font_vx(c8_state *state, uint8_t x) {
  * Convert that word to BCD and store the 3 digits at memory location I
  * through I+2. I does not change.
  */
-static void c8_op_bcd(c8_state *state, uint8_t x) {
+static void c8_op_bcd(c8_state* state, uint8_t x) {
     const uint16_t i = state->registers.i;
     const uint16_t vx = state->registers.v[x];
 
@@ -518,7 +525,7 @@ static void c8_op_bcd(c8_state *state, uint8_t x) {
  *
  * Store registers V0 through VX in memory starting at location I.
  */
-static void c8_op_ld_i_vx(c8_state *state, uint8_t x) {
+static void c8_op_ld_i_vx(c8_state* state, uint8_t x) {
     const uint16_t i = state->registers.i;
     const uint16_t mem_size = state->config.memory_size;
 
@@ -528,8 +535,10 @@ static void c8_op_ld_i_vx(c8_state *state, uint8_t x) {
 
     memcpy(state->memory + i, state->registers.v, x + 1);
 
-    const bool shouldIncI = (state->config.quirks & C8_QUIRK_LOAD_STORE_NO_INC_I) == 0;
-    const bool incByX = (state->config.quirks & C8_QUIRK_LOAD_STORE_INC_I_BY_X) != 0;
+    const bool
+        shouldIncI = (state->config.quirks & C8_QUIRK_LOAD_STORE_NO_INC_I) == 0;
+    const bool
+        incByX = (state->config.quirks & C8_QUIRK_LOAD_STORE_INC_I_BY_X) != 0;
 
     if (shouldIncI) {
         state->registers.i += x + (incByX ? 0 : 1);
@@ -544,7 +553,7 @@ static void c8_op_ld_i_vx(c8_state *state, uint8_t x) {
  * Copy values from memory location I through I + X into registers V0
  * through VX.
  */
-static void c8_op_ld_vx_i(c8_state *state, uint8_t x) {
+static void c8_op_ld_vx_i(c8_state* state, uint8_t x) {
     const uint16_t i = state->registers.i;
     const uint16_t mem_size = state->config.memory_size;
 
@@ -554,8 +563,10 @@ static void c8_op_ld_vx_i(c8_state *state, uint8_t x) {
 
     memcpy(state->registers.v, state->memory + i, x + 1);
 
-    const bool shouldIncI = (state->config.quirks & C8_QUIRK_LOAD_STORE_NO_INC_I) == 0;
-    const bool incByX = (state->config.quirks & C8_QUIRK_LOAD_STORE_INC_I_BY_X) != 0;
+    const bool
+        shouldIncI = (state->config.quirks & C8_QUIRK_LOAD_STORE_NO_INC_I) == 0;
+    const bool
+        incByX = (state->config.quirks & C8_QUIRK_LOAD_STORE_INC_I_BY_X) != 0;
 
     if (shouldIncI) {
         state->registers.i += x + (incByX ? 0 : 1);
@@ -566,7 +577,7 @@ static void c8_op_ld_vx_i(c8_state *state, uint8_t x) {
 
 #pragma endregion
 
-static bool c8_chip8_op_handler(c8_state *state, uint16_t op) {
+static bool c8_chip8_op_handler(c8_state* state, uint16_t op) {
     bool h = false; // is op handled
 
     switch (op & 0xF000) {
@@ -605,7 +616,9 @@ static bool c8_chip8_op_handler(c8_state *state, uint16_t op) {
         case 0x5000:
             switch (op & 0x000F) {
                 case 0:
-                    c8_op_se_vx_vy(state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4);
+                    c8_op_se_vx_vy(
+                        state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4
+                    );
                     h = true;
                     break;
                 default:
@@ -623,7 +636,9 @@ static bool c8_chip8_op_handler(c8_state *state, uint16_t op) {
         case 0x8000:
             switch (op & 0x000F) {
                 case 0x0:
-                    c8_op_ld_vx_vy(state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4);
+                    c8_op_ld_vx_vy(
+                        state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4
+                    );
                     h = true;
                     break;
                 case 0x1:
@@ -639,7 +654,9 @@ static bool c8_chip8_op_handler(c8_state *state, uint16_t op) {
                     h = true;
                     break;
                 case 0x4:
-                    c8_op_add_vx_vy(state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4);
+                    c8_op_add_vx_vy(
+                        state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4
+                    );
                     h = true;
                     break;
                 case 0x5:
@@ -665,7 +682,9 @@ static bool c8_chip8_op_handler(c8_state *state, uint16_t op) {
         case 0x9000:
             switch (op & 0x000F) {
                 case 0:
-                    c8_op_sne_vx_vy(state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4);
+                    c8_op_sne_vx_vy(
+                        state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4
+                    );
                     h = true;
                     break;
                 default:
@@ -685,7 +704,9 @@ static bool c8_chip8_op_handler(c8_state *state, uint16_t op) {
             h = true;
             break;
         case 0xD000:
-            c8_op_drw(state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4, op & 0x000F);
+            c8_op_drw(
+                state, (op & 0x0F00) >> 8, (op & 0x00F0) >> 4, op & 0x000F
+            );
             h = true;
             break;
         case 0xE000:
@@ -754,19 +775,19 @@ static bool c8_chip8_op_handler(c8_state *state, uint16_t op) {
 
 c8_machine_config c8_get_default_machine_config() {
     c8_machine_config config = {
-            .op_handlers = {c8_chip8_op_handler,},
-            .op_handlers_size = 1,
-			.quirks = C8_QUIRK_NONE,
-            .memory_size = 4096,
-			.cycles_per_frame = 15,
-            .screen_width = 64,
-            .screen_height = 32
+        .op_handlers = {c8_chip8_op_handler, },
+        .op_handlers_size = 1,
+        .quirks = C8_QUIRK_NONE,
+        .memory_size = 4096,
+        .cycles_per_frame = 15,
+        .screen_width = 64,
+        .screen_height = 32
     };
     return config;
 }
 
-c8_state *c8_create(c8_machine_config config) {
-    c8_state *result = malloc(sizeof(c8_state));
+c8_state* c8_create(c8_machine_config config) {
+    c8_state* result = malloc(sizeof(c8_state));
     result->config = config;
     result->memory = nullptr;
     result->display = nullptr;
@@ -777,7 +798,7 @@ c8_state *c8_create(c8_machine_config config) {
     return result;
 }
 
-void c8_destroy(c8_state *state) {
+void c8_destroy(c8_state* state) {
     if (state == nullptr) {
         return;
     }
@@ -786,7 +807,7 @@ void c8_destroy(c8_state *state) {
     free(state);
 }
 
-void c8_set_rng_seed(c8_state *state, uint32_t seed) {
+void c8_set_rng_seed(c8_state* state, uint32_t seed) {
     if (state == nullptr) {
         return;
     }
@@ -794,7 +815,7 @@ void c8_set_rng_seed(c8_state *state, uint32_t seed) {
     state->rng.seed = seed;
 }
 
-uint32_t c8_get_rng_seed(c8_state *state) {
+uint32_t c8_get_rng_seed(c8_state* state) {
     if (state == nullptr) {
         return 0;
     }
@@ -802,7 +823,7 @@ uint32_t c8_get_rng_seed(c8_state *state) {
     return state->rng.seed;
 }
 
-void c8_load_rom(c8_state *state, const uint8_t *rom, uint16_t size) {
+void c8_load_rom(c8_state* state, const uint8_t* rom, uint16_t size) {
     if (state == nullptr || rom == nullptr) {
         return;
     }
@@ -811,7 +832,7 @@ void c8_load_rom(c8_state *state, const uint8_t *rom, uint16_t size) {
     memmove(state->memory + 0x200, rom, sz);
 }
 
-const c8_machine_config *c8_get_machine_config(c8_state *state) {
+const c8_machine_config* c8_get_machine_config(c8_state* state) {
     if (state == nullptr) {
         return nullptr;
     }
@@ -819,7 +840,7 @@ const c8_machine_config *c8_get_machine_config(c8_state *state) {
     return &state->config;
 }
 
-const c8_registers *c8_get_registers(const c8_state *state) {
+const c8_registers* c8_get_registers(const c8_state* state) {
     if (state == nullptr) {
         return nullptr;
     }
@@ -827,7 +848,7 @@ const c8_registers *c8_get_registers(const c8_state *state) {
     return &state->registers;
 }
 
-void c8_set_registers(c8_state *state, const c8_registers *regs) {
+void c8_set_registers(c8_state* state, const c8_registers* regs) {
     if (state == nullptr || regs == nullptr) {
         return;
     }
@@ -835,7 +856,7 @@ void c8_set_registers(c8_state *state, const c8_registers *regs) {
     state->registers = *regs;
 }
 
-const uint8_t *c8_get_display(const c8_state *state, uint32_t *display_size) {
+const uint8_t* c8_get_display(const c8_state* state, uint32_t* display_size) {
     if (state == nullptr || display_size == nullptr) {
         return nullptr;
     }
@@ -846,46 +867,55 @@ const uint8_t *c8_get_display(const c8_state *state, uint32_t *display_size) {
 
 const uint8_t* c8_get_memory(c8_state* state) {
     if (state == nullptr) {
-         return nullptr;
+        return nullptr;
     }
 
     return state->memory;
 }
 
-void c8_reset(c8_state *state) {
+void c8_reset(c8_state* state) {
     if (state == nullptr) {
         return;
     }
 
     if (state->memory == nullptr) {
         state->memory = calloc(state->config.memory_size, 1);
-    } else {
+    }
+    else {
         memset(state->memory, 0, state->config.memory_size);
     }
 
-    memcpy(state->memory + C8_PC_ON_FAULT, C8_FAULT_HANDLER, sizeof(C8_FAULT_HANDLER));
+    memcpy(state->memory + C8_PC_ON_FAULT,
+           C8_FAULT_HANDLER,
+           sizeof(C8_FAULT_HANDLER));
     memcpy(state->memory + C8_MEM_FONT_OFFSET, C8_FONT, 80);
 
     if (state->display == nullptr) {
-        state->display = calloc(state->config.screen_width * state->config.screen_height, 1);
-    } else {
-        memset(state->display, 0, state->config.screen_width * state->config.screen_height);
+        state->display = calloc(
+            state->config.screen_width * state->config.screen_height,
+            1
+        );
+    }
+    else {
+        memset(state->display,
+               0,
+               state->config.screen_width * state->config.screen_height);
     }
 
     state->delta_time = 0.f;
     memset(state->pressed_keys, 0, C8_KEY_MAX);
-    state->registers = (c8_registers) {
-            .stack = {0,},
-            .v = {0,},
-            .pc = 0x200,
-            .i = 0,
-            .sp = 0,
-            .dt = 0,
-            .st = 0,
+    state->registers = (c8_registers){
+        .stack = { 0, },
+        .v = { 0, },
+        .pc = 0x200,
+        .i = 0,
+        .sp = 0,
+        .dt = 0,
+        .st = 0,
     };
 }
 
-void c8_update_timers(c8_state *state, float delta_time) {
+void c8_update_timers(c8_state* state, float delta_time) {
     if (state == nullptr) {
         return;
     }
@@ -894,22 +924,23 @@ void c8_update_timers(c8_state *state, float delta_time) {
 
     state->delta_time += delta_time;
 
-    int ticks_elapsed = (int) (state->delta_time / MS_PER_VBLANK);
+    int ticks_elapsed = (int)(state->delta_time / MS_PER_VBLANK);
     int new_dt = state->registers.dt - ticks_elapsed;
     int new_st = state->registers.st - ticks_elapsed;
     state->registers.dt = C8_MAX(new_dt, 0);
     state->registers.st = C8_MAX(new_st, 0);
 
-    state->delta_time -= MS_PER_VBLANK * (float) ticks_elapsed;
+    state->delta_time -= MS_PER_VBLANK * (float)ticks_elapsed;
     state->vblank = ticks_elapsed;
 }
 
-void c8_step(c8_state *state) {
+void c8_step(c8_state* state) {
     if (state == nullptr) {
         return;
     }
 
-    uint16_t op = state->memory[state->registers.pc] << 8 | state->memory[state->registers.pc + 1];
+    uint16_t op = state->memory[state->registers.pc] << 8
+        | state->memory[state->registers.pc + 1];
 
     bool opHandled = false;
     for (int i = 0; i < state->config.op_handlers_size; ++i) {
@@ -925,7 +956,7 @@ void c8_step(c8_state *state) {
     }
 }
 
-void c8_step_frame(c8_state *state) {
+void c8_step_frame(c8_state* state) {
     if (state == nullptr) {
         return;
     }
@@ -935,7 +966,7 @@ void c8_step_frame(c8_state *state) {
     }
 }
 
-void c8_press_key(c8_state *state, c8_key key) {
+void c8_press_key(c8_state* state, c8_key key) {
     if (state == nullptr) {
         return;
     }
@@ -943,7 +974,7 @@ void c8_press_key(c8_state *state, c8_key key) {
     state->pressed_keys[key] = true;
 }
 
-void c8_release_key(c8_state *state, c8_key key) {
+void c8_release_key(c8_state* state, c8_key key) {
     if (state == nullptr) {
         return;
     }
